@@ -22,6 +22,9 @@ import sys
 from colorama import init
 init()
 HAS_COLOR = True
+import sys
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import PathCompleter
 
 # Replace the has_colors import with this
 HAS_COLOR = sys.stdout.isatty()  # Basic check if stdout is a terminal
@@ -75,13 +78,16 @@ from pandacite.processors.numbered import NumberedCitationProcessor
 
 # ASCII art for PandaCite banner
 PANDA_BANNER = r"""
-  _____                _       _____ _ _       
- |  __ \              | |     / ____(_) |      
- | |__) |_ _ _ __   __| | __ | |     _| |_ ___ 
- |  ___/ _` | '_ \ / _` |/ / | |    | | __/ _ \
- | |  | (_| | | | | (_| | |  | |____| | ||  __/
- |_|   \__,_|_| |_|\__,_|\_\  \_____|_|\__\___|
-    
+ _______                            __             ______   __    __               
+/       \                          /  |           /      \ /  |  /  |              
+$$$$$$$  | ______   _______    ____$$ |  ______  /$$$$$$  |$$/  _$$ |_     ______  
+$$ |__$$ |/      \ /       \  /    $$ | /      \ $$ |  $$/ /  |/ $$   |   /      \ 
+$$    $$/ $$$$$$  |$$$$$$$  |/$$$$$$$ | $$$$$$  |$$ |      $$ |$$$$$$/   /$$$$$$  |
+$$$$$$$/  /    $$ |$$ |  $$ |$$ |  $$ | /    $$ |$$ |   __ $$ |  $$ | __ $$    $$ |
+$$ |     /$$$$$$$ |$$ |  $$ |$$ \__$$ |/$$$$$$$ |$$ \__/  |$$ |  $$ |/  |$$$$$$$$/ 
+$$ |     $$    $$ |$$ |  $$ |$$    $$ |$$    $$ |$$    $$/ $$ |  $$  $$/ $$       |
+$$/       $$$$$$$/ $$/   $$/  $$$$$$$/  $$$$$$$/  $$$$$$/  $$/    $$$$/   $$$$$$$/ 
+                                                                                   
 """
 
 # Simple Unicode panda for smaller outputs
@@ -191,10 +197,6 @@ def main():
        
     parser = argparse.ArgumentParser(description="PandaCite: A Python-based Citation Manager")
     print_banner()
-    print("Welcome to PandaCite!")
-    print("===========================================")
-    print("Use 'pandacite --help' for more information.")
-    print("===========================================")
     
     # Create subparsers for different commands
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
@@ -558,6 +560,11 @@ def handle_word_command(args, citation_manager):
     else:
         print_panda_message("No metadata extracted. Cannot update the document.", "sad")
 
+
+
+def get_file_path(prompt_text):
+    completer = PathCompleter(only_files=True)
+    return prompt(prompt_text, completer=completer)
 
 def run_interactive_mode(citation_manager, format_choices, id_type_choices):
     """Run the citation manager in interactive mode"""
