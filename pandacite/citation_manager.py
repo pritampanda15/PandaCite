@@ -1,7 +1,18 @@
-from .formatters import FORMATTERS
-from .extractors.metadata import EnhancedMetadataExtractor
-from .extractors.detector import IDDetector
-from .parsers import DOIParser, PMIDParser, ArXivParser, ISBNParser, URLParser, BibTexParser, RISParser
+from pandacite.formatters import FORMATTERS
+from pandacite.extractors.metadata import EnhancedMetadataExtractor
+from pandacite.extractors.detector import IDDetector
+from pandacite.parsers import DOIParser, PMIDParser, ArXivParser, ISBNParser, URLParser, BibTexParser, RISParser
+import requests
+import json
+import sys
+import os
+import re
+import argparse
+from typing import Dict, Any, List, Optional, Tuple
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from urllib.parse import urlparse
+from docx import Document
 
 
 class EnhancedCitationManager:
