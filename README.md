@@ -1,6 +1,6 @@
 # PandaCite
 
-<img src="logo.png" width="200" alt="PandaCite Logo">
+<img src="logo/pandacite.png" width="400" alt="PandaCite Logo">
 
 A Python-based citation manager similar to EndNote or Mendeley.
 
