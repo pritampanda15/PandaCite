@@ -23,7 +23,7 @@
     <img src="https://static.pepy.tech/badge/pandacite" alt="Downloads">
   </a>
 </p>
-
+</div>
 ---
 
 ## 🚀 Features
