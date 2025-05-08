@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/pritampanda15/pandacite/main/logo/pandacite.png" width="500" alt="PandaCite Logo" />
+    <img src="https://raw.githubusercontent.com/pritampanda15/pandacite/main/logo/pandacite.png" width="500" alt="PandaCite Logo" />
   <p><em>A Python-based citation manager for researchers & writers </em></p>
 
   <!-- Badges -->
