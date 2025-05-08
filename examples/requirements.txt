@@ -24,6 +24,7 @@ more-itertools==10.7.0
 multidict==6.4.3
 nh3==0.2.21
 packaging==25.0
+-e git+https://github.com/pritampanda15/PandaCite.git@8d2e3b227c297286aa53cacd67f4336ae855bb6e#egg=pandacite
 prompt_toolkit==3.0.51
 propcache==0.3.1
 Pygments==2.19.1

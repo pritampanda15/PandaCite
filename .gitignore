@@ -67,8 +67,6 @@ ENV/
 env.bak/
 venv.bak/
 .venv/
-.pandadock/
-.pandadock
 
 # VSCode
 .vscode/
@@ -82,10 +80,6 @@ venv.bak/
 
 # macOS
 .DS_Store
-
-# Docking results
-docking_results*/
-temp_pandadock/
 
 # Log files
 *.log
