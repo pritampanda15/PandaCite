@@ -1,7 +1,6 @@
 <div align="center">
-  <img src="logo/pandacite.png" width="300" alt="PandaCite Logo" />
-  <h1>PandaCite</h1>
-  <p><em>A Python-based citation manager like EndNote or Mendeley — for the terminal & beyond.</em></p>
+  <img src="logo/pandacite.png" width="500" alt="PandaCite Logo" />
+  <p><em>A Python-based citation manager for researchers & writers </em></p>
 
   <!-- Badges -->
   <p>
@@ -42,7 +41,7 @@ pip install pandacite
 ### ➤ Generate a single citation
 
 ```bash
-pandacite single --id "10.1038/s41586-020-2649-2" --format nature
+pandacite single --id "https://doi.org/10.1126/sciadv.abb8097" --format nature
 ```
 
 ### ➤ Process citations in a Word document
