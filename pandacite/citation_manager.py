@@ -13,6 +13,41 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from urllib.parse import urlparse
 from docx import Document
+from pandacite.formatters import (
+    ElsevierFormatter,
+    SpringerFormatter,
+    APAFormatter,
+    NatureFormatter,
+    ScienceFormatter,
+    IEEEFormatter,
+    ChicagoFormatter,
+    MLAFormatter,
+    HarvardFormatter,
+    VancouverFormatter,
+    BMCFormatter,
+    PLOSFormatter,
+    CellFormatter,
+    JAMAFormatter,
+    BMJFormatter,
+    NEJMFormatter,
+    JBCFormatter,
+    RSCFormatter,
+    ACSFormatter,
+    AIPFormatter,
+    ACMFormatter,
+    OxfordFormatter
+)
+from pandacite.parsers import (
+    DOIParser,
+    PMIDParser,
+    ArXivParser,
+    ISBNParser,
+    URLParser,
+    BibTexParser,
+    RISParser
+)
+from pandacite.extractors.metadata import EnhancedMetadataExtractor
+from pandacite.extractors.detector import IDDetector
 
 
 class EnhancedCitationManager:

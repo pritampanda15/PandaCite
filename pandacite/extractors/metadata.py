@@ -124,6 +124,24 @@ class EnhancedMetadataExtractor:
 
     def extract_from_url(self, url: str) -> Optional[Dict[str, Any]]:
         """Extract metadata from a URL"""
+        # Direct Science.org DOI extraction - no HTTP request needed
+        if "science.org/doi/" in url or "sciencemag.org/doi/" in url:
+            # Pattern to extract DOI directly from Science URLs
+            doi_pattern = r'(?:science\.org|sciencemag\.org)/doi/(?:abs/|full/|pdf/|)?(10\.\d{4,9}/[^/\s?#]+)'
+            doi_match = re.search(doi_pattern, url)
+            
+            if doi_match:
+                doi = doi_match.group(1)
+                print(f"Directly extracted DOI {doi} from Science.org URL without making a request")
+                return self.extract_from_doi(doi)
+            
+            # Alternative: simpler pattern as fallback
+            doi_match = re.search(r'10\.\d{4,9}/[^/\s?#]+', url)
+            if doi_match:
+                doi = doi_match.group(0)
+                print(f"Extracted DOI {doi} from URL using simple pattern")
+                return self.extract_from_doi(doi)
+        
         # Check if it's a PMC URL
         if "pmc.ncbi.nlm.nih.gov/articles/PMC" in url:
             # Extract PMC ID
@@ -152,7 +170,84 @@ class EnhancedMetadataExtractor:
         if "nature.com" in url:
             return self._extract_from_nature_url(url)
         elif "science.org" in url:
-            return self._extract_from_science_url(url)
+            # For Science.org URLs, try to use more robust browser headers
+            try:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5",
+                    "Referer": "https://www.google.com/",
+                    "DNT": "1",
+                    "Connection": "keep-alive",
+                    "Upgrade-Insecure-Requests": "1",
+                    "Cache-Control": "max-age=0"
+                }
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
+                
+                # Use BeautifulSoup to parse if available
+                try:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    metadata = {
+                        "title": "",
+                        "authors": [],
+                        "journal": "Science",
+                        "year": "",
+                        "url": url
+                    }
+                    
+                    # Extract title
+                    title_tag = soup.find("meta", property="og:title") or soup.find("meta", attrs={"name": "citation_title"})
+                    if title_tag:
+                        metadata["title"] = title_tag.get("content", "")
+                    else:
+                        title_tag = soup.find("title")
+                        if title_tag:
+                            metadata["title"] = title_tag.text
+                    
+                    # Extract authors
+                    author_tags = soup.find_all("meta", attrs={"name": "citation_author"})
+                    if author_tags:
+                        metadata["authors"] = [tag.get("content", "") for tag in author_tags]
+                    else:
+                        # Try alternative method
+                        author_elements = soup.select(".contrib-author")
+                        if author_elements:
+                            metadata["authors"] = [author.text.strip() for author in author_elements]
+                    
+                    # Extract date/year
+                    date_tag = soup.find("meta", attrs={"name": "citation_publication_date"})
+                    if date_tag:
+                        date_content = date_tag.get("content", "")
+                        if date_content and len(date_content) >= 4:
+                            metadata["year"] = date_content[:4]
+                    
+                    # Extract DOI
+                    doi_tag = soup.find("meta", attrs={"name": "citation_doi"})
+                    if doi_tag:
+                        metadata["doi"] = doi_tag.get("content", "")
+                    
+                    return metadata
+                except ImportError:
+                    print("BeautifulSoup not available, trying DOI extraction")
+                    # Fall back to DOI extraction
+                    doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', url, re.IGNORECASE)
+                    if doi_match:
+                        doi = doi_match.group(0)
+                        return self.extract_from_doi(doi)
+                    
+            except Exception as e:
+                print(f"Error processing Science.org URL: {e}")
+                # Try to extract DOI as a fallback
+                doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', url, re.IGNORECASE)
+                if doi_match:
+                    doi = doi_match.group(0)
+                    print(f"Falling back to DOI extraction: {doi}")
+                    return self.extract_from_doi(doi)
+                return None
+                
         elif "pubmed.ncbi.nlm.nih.gov" in url:
             # Extract PMID from PubMed URL
             pmid = url.split("/")[-1].split("?")[0]
@@ -177,10 +272,24 @@ class EnhancedMetadataExtractor:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5"
+                "Accept-Language": "en-US,en;q=0.5",
+                "Referer": "https://www.google.com/",
+                "DNT": "1"
             }
             response = requests.get(url, headers=headers)
             response.raise_for_status()
+            
+            # Check for DOI in the URL or page content
+            doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', url, re.IGNORECASE)
+            if not doi_match:
+                doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', response.text, re.IGNORECASE)
+            
+            if doi_match:
+                doi = doi_match.group(0)
+                print(f"Found DOI in URL/content: {doi}, trying DOI extraction")
+                doi_metadata = self.extract_from_doi(doi)
+                if doi_metadata:
+                    return doi_metadata
             
             # Use BeautifulSoup to parse HTML if available
             try:
@@ -244,6 +353,12 @@ class EnhancedMetadataExtractor:
                 return metadata
         except Exception as e:
             print(f"Error extracting metadata from URL {url}: {e}")
+            # Last resort: Try to find a DOI and use that
+            doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', url, re.IGNORECASE)
+            if doi_match:
+                doi = doi_match.group(0)
+                print(f"Last resort: Trying DOI extraction from URL pattern: {doi}")
+                return self.extract_from_doi(doi)
             return None
     
     def _extract_from_generic_url(self, url: str) -> Optional[Dict[str, Any]]:
@@ -320,13 +435,14 @@ class EnhancedMetadataExtractor:
         """Extract metadata from a Nature URL"""
         # This would implement specific logic for Nature articles
         # For now, use the generic URL extractor
-        return self._extract_from_generic_url(url)
+        return self._extract_from_generic_url_with_headers(url)
+
     
     def _extract_from_science_url(self, url: str) -> Optional[Dict[str, Any]]:
         """Extract metadata from a Science URL"""
         # This would implement specific logic for Science articles
         # For now, use the generic URL extractor
-        return self._extract_from_generic_url(url)
+        return self._extract_from_generic_url_with_headers(url)
     
     def _parse_crossref_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse Crossref API response into standardized metadata format"""

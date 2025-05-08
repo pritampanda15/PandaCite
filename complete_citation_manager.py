@@ -2297,11 +2297,13 @@ class CommandLineWordProcessor:
             except Exception as e:
                 try:
                     # Method 2: Try to add a plain paragraph with bold text
-                    print(f"Warning: Could not add heading with style: {e}")
-                    para = document.add_paragraph()
-                    run = para.add_run("References")
+                    print(f"Using simple heading instead of styled heading: {e}")
+                    paragraph = document.add_paragraph("References")
+                    paragraph.style = 'Normal'  # This will always exist
+                    run = paragraph.runs[0]
                     run.bold = True
-                    
+                    run.font.size = Pt(14)  # Approximation of heading size
+                                    
                     # Try to set font size if possible
                     try:
                         from docx.shared import Pt

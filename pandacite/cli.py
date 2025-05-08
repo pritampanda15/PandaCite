@@ -16,10 +16,185 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from urllib.parse import urlparse
 from docx import Document
+from colorama import Fore, Back, Style, init
+from colorama import deinit
+import sys
+from colorama import init
+init()
+HAS_COLOR = True
+
+# Replace the has_colors import with this
+HAS_COLOR = sys.stdout.isatty()  # Basic check if stdout is a terminal
+# Initialize colorama
+init(autoreset=True)
+# Deinitialize colorama on exit
+def cleanup():
+    """Deinitialize colorama"""
+    deinit()
+import atexit
+atexit.register(cleanup)
+# Import citation formatters and parsers
+
+from pandacite.formatters import (
+    ElsevierFormatter,
+    SpringerFormatter,
+    APAFormatter,
+    NatureFormatter,
+    ScienceFormatter,
+    IEEEFormatter,
+    ChicagoFormatter,
+    MLAFormatter,
+    HarvardFormatter,
+    VancouverFormatter,
+    BMCFormatter,
+    PLOSFormatter,
+    CellFormatter,
+    JAMAFormatter,
+    BMJFormatter,
+    NEJMFormatter,
+    JBCFormatter,
+    RSCFormatter,
+    ACSFormatter,
+    AIPFormatter,
+    ACMFormatter,
+    OxfordFormatter
+)
+from pandacite.parsers import (
+    DOIParser,
+    PMIDParser,
+    ArXivParser,
+    ISBNParser,
+    URLParser,
+    BibTexParser,
+    RISParser
+)
+from pandacite.extractors.metadata import EnhancedMetadataExtractor
+from pandacite.extractors.detector import IDDetector
+from pandacite.processors.word import CommandLineWordProcessor
+from pandacite.processors.numbered import NumberedCitationProcessor
+
+# ASCII art for PandaCite banner
+PANDA_BANNER = r"""
+  _____                _       _____ _ _       
+ |  __ \              | |     / ____(_) |      
+ | |__) |_ _ _ __   __| | __ | |     _| |_ ___ 
+ |  ___/ _` | '_ \ / _` |/ / | |    | | __/ _ \
+ | |  | (_| | | | | (_| | |  | |____| | ||  __/
+ |_|   \__,_|_| |_|\__,_|\_\  \_____|_|\__\___|
+    
+"""
+
+# Simple Unicode panda for smaller outputs
+SMALL_PANDA = "ʕ •ᴥ• ʔ"
+
+# Function to print the banner
+def print_banner():
+    """Print the PandaCite banner"""
+    print(PANDA_BANNER)
+    print("  Citation manager for researchers & writers")
+    print()
+# Function to print the small panda
+def print_small_panda():
+    """Print a small panda"""
+    print(SMALL_PANDA)
+    print("  Citation manager for researchers & writers")
+    print()
+
+# Add these panda constants to your CLI file for more options
+
+# Cute mini panda - great for small notifications 
+MINI_PANDA = "🐼"
+
+# Detailed UTF-8 panda
+DETAILED_PANDA = """
+   ▄▀▀▀▄▄▄▄▄▄▄▀▀▀▄    
+   █▒▒░░░░░░░░░▒▒█    
+  █░░█░░░░░░█░░░░█    PandaCite
+ ▄▄█░░░▀█▀░░░░░░█▄▄   
+ █░░░░░░▀░░░░░░░░░█   Citation manager for 
+ █░░░░░░░░▀▀░░░░░░█   researchers & writers
+   █░░░░░░░░░░░░░█    
+    █░░░▄▄▄▄▄░░█     
+     █░░░░░░░░░█      
+"""
+
+# Panda progress indicator array (for loading animations)
+PANDA_PROGRESS = [
+    "  ʕ •ᴥ• ʔ   ",
+    "  ʕ •ᴥ• ʔ.  ",
+    "  ʕ •ᴥ• ʔ.. ",
+    "  ʕ •ᴥ• ʔ...",
+    "  ʕ •ᴥ• ʔ.. ",
+    "  ʕ •ᴥ• ʔ.  "
+]
+
+# Panda faces showing different emotions
+PANDA_FACES = {
+    "normal": "ʕ •ᴥ• ʔ",
+    "happy": "ʕ ᵔᴥᵔ ʔ",
+    "sad": "ʕ ´•ᴥ•` ʔ",
+    "excited": "ʕ •̀ω•́ ʔ",
+    "working": "ʕ⁎̯͡⁎ʔ",
+    "confused": "ʕ ಡ ﹏ ಡ ʔ",
+    "sleepy": "ʕ￫ᴥ￩ʔ",
+    "citation": "ʕ ﹁ ᴥ ﹁ ʔ〈",
+    "error": "ʕノ•ᴥ•ʔノ ︵ ┻━┻",
+    "done": "ʕっ•ᴥ•ʔっ 📝"
+}
+
+# Function to show a progress animation
+def show_panda_progress(message, iterations=10, delay=0.2):
+    """
+    Show a cute panda progress animation
+    
+    Args:
+        message: Message to display
+        iterations: Number of animation cycles
+        delay: Delay between frames in seconds
+    """
+    try:
+        import time
+        import sys
+        
+        for i in range(iterations):
+            idx = i % len(PANDA_PROGRESS)
+            # Clear line and print progress
+            sys.stdout.write("\r" + message + " " + PANDA_PROGRESS[idx])
+            sys.stdout.flush()
+            time.sleep(delay)
+        
+        # Clear the animation when done
+        sys.stdout.write("\r" + " " * (len(message) + 20) + "\r")
+        sys.stdout.flush()
+    except Exception:
+        # On error, just print the message without animation
+        print(message)
+
+# Function to print a panda face with a message
+def print_panda_message(message, mood="normal"):
+    """
+    Print a message with a panda face showing the specified mood
+    
+    Args:
+        message: Message to display
+        mood: Panda's mood from PANDA_FACES dictionary
+    """
+    face = PANDA_FACES.get(mood, PANDA_FACES["normal"])
+    
+    if HAS_COLOR:
+        print(f"{Fore.BLACK}{Back.WHITE}{face}{Style.RESET_ALL} {Fore.CYAN}{message}{Style.RESET_ALL}")
+    else:
+        print(f"{face} {message}")
 
 def main():
     """Main entry point for the citation manager"""
-    parser = argparse.ArgumentParser(description="Enhanced Citation Manager")
+       
+    parser = argparse.ArgumentParser(description="PandaCite: A Python-based Citation Manager")
+    print_banner()
+    print("Welcome to PandaCite!")
+    print("===========================================")
+    print("Use 'pandacite --help' for more information.")
+    print("===========================================")
     
     # Create subparsers for different commands
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
@@ -74,29 +249,38 @@ def main():
     # Create citation manager
     citation_manager = EnhancedCitationManager()
     
+    # If no arguments provided, show help with panda
+    if len(sys.argv) == 1:
+        parser.print_help()
+        print(f"\n{SMALL_PANDA}  Use 'pandacite interactive' for the menu-driven interface")
+        return
+    
     if args.command == "single":
         # Process a single citation
+        print_panda_message("Processing citation...", "working")
         citation = citation_manager.process_single_citation(
             args.id_type, args.id, args.format
         )
         
         if citation:
+            print_panda_message("Citation generated successfully!", "happy")
             print("\nGenerated Citation:")
             print(citation)
             
             if args.output:
                 if citation_manager.export_citations([citation], args.output):
+                    print_panda_message("Citation generated successfully!", "happy")
                     print(f"\nCitation exported to {args.output}")
                 else:
-                    print(f"\nFailed to export citation to {args.output}")
+                    print_panda_message(f"Failed to export citation to {args.output}", "sad")
             
             if args.bibtex:
                 if citation_manager.export_bibtex(args.bibtex):
-                    print(f"\nBibTeX exported to {args.bibtex}")
+                    print_panda_message(f"Failed to export citation to {args.output}", "sad")
                 else:
-                    print(f"\nFailed to export BibTeX to {args.bibtex}")
+                    print_panda_message(f"Failed to export citation to {args.output}", "sad")
         else:
-            print(f"\nFailed to generate citation for {args.id_type} {args.id}")
+            print_panda_message(f"Failed to generate citation for {args.id_type} {args.id}", "error")
     
     elif args.command == "batch":
         # Process multiple citations
@@ -129,6 +313,7 @@ def main():
     
     elif args.command == "word":
         # Process Word document
+        print_panda_message(f"Failed to generate citation for {args.id_type} {args.id}", "error")
         handle_word_command(args, citation_manager)
     
     elif args.command == "interactive":
@@ -138,6 +323,9 @@ def main():
     else:
         # Show help if no command is provided
         parser.print_help()
+        print()
+        print_panda_message("Use 'pandacite interactive' for the menu-driven interface", "citation")
+    
 
 # Add this to the handle_word_command function in complete_citation_manager.py
 
@@ -168,7 +356,7 @@ def handle_word_command(args, citation_manager):
     document, citations = word_processor.process_document(args.input, args.format, id_detector)
     
     # Extract metadata for citations
-    print("Extracting metadata for citations...")
+    show_panda_progress("Extracting metadata from citations", 15, 0.1)
     extracted_metadata = {}
     citation_lookup = {}  # Map source_text to metadata keys
     
@@ -202,6 +390,7 @@ def handle_word_command(args, citation_manager):
                     citation_lookup[source_text.lower()] = key
                 
                 print(f"  Extracted metadata for {id_type} {identifier}")
+                
     
     # Extract metadata from citations found in the document
     for citation_key, citation in citations.items():
@@ -321,7 +510,7 @@ def handle_word_command(args, citation_manager):
     # Update the document with citations
     if extracted_metadata:
         # Print a summary of what will be updated
-        print("\nFound the following references:")
+        print_panda_message(f"Found {len(extracted_metadata)} references to format", "happy")
         for i, (key, metadata) in enumerate(extracted_metadata.items(), 1):
             formatter = citation_manager.formatters.get(args.format.lower())
             if formatter:
@@ -359,6 +548,7 @@ def handle_word_command(args, citation_manager):
                 return
             except Exception as e:
                 print(f"Error saving document with numbered citations: {e}")
+                print_panda_message(f"Document saved to {args.output}", "done")
                 # Continue to standard processing as fallback
         else:
             # Standard processing for non-numbered styles
@@ -366,7 +556,7 @@ def handle_word_command(args, citation_manager):
                 document, citations, extracted_metadata, args.format, args.output
             )
     else:
-        print("No metadata extracted. Cannot update the document.")
+        print_panda_message("No metadata extracted. Cannot update the document.", "sad")
 
 
 def run_interactive_mode(citation_manager, format_choices, id_type_choices):
