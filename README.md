@@ -1,20 +1,28 @@
 <div align="center">
-  <img src="logo/pandacite.png" width="500" alt="PandaCite Logo" />
+  <img src="https://raw.githubusercontent.com/pritampanda15/pandacite/main/logo/pandacite.png" width="500" alt="PandaCite Logo" />
   <p><em>A Python-based citation manager for researchers & writers </em></p>
 
   <!-- Badges -->
-  <p>
-    <a href="https://pypi.org/project/pandacite/">
-      <img src="https://img.shields.io/pypi/v/pandacite.svg?style=for-the-badge" alt="PyPI version">
-    </a>
-    <a href="https://github.com/pritampanda15/PandaCite">
-      <img src="https://img.shields.io/github/stars/pritampanda15/PandaCite?style=social" alt="GitHub stars">
-    </a>
-    <a href="https://github.com/pritampanda15/PandaCite/blob/main/LICENSE">
-      <img src="https://img.shields.io/github/license/pritampanda15/PandaCite?style=flat-square" alt="MIT License">
-    </a>
-  </p>
-</div>
+<p align="center">
+  <a href="https://pypi.org/project/pandacite/">
+    <img src="https://img.shields.io/pypi/v/pandacite.svg" alt="PyPI Version">
+  </a>
+  <a href="https://github.com/pritampanda15/PandaCite/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/pritampanda15/PandaCite" alt="License">
+  </a>
+  <a href="https://github.com/pritampanda15/PandaCite/stargazers">
+    <img src="https://img.shields.io/github/stars/pritampanda15/PandaCite?style=social" alt="GitHub Stars">
+  </a>
+  <a href="https://github.com/pritampanda15/PandaCite/issues">
+    <img src="https://img.shields.io/github/issues/pritampanda15/PandaCite" alt="GitHub Issues">
+  </a>
+  <a href="https://github.com/pritampanda15/PandaCite/network/members">
+    <img src="https://img.shields.io/github/forks/pritampanda15/PandaCite?style=social" alt="GitHub Forks">
+  </a>
+  <a href="https://pepy.tech/project/pandacite">
+    <img src="https://static.pepy.tech/badge/pandacite" alt="Downloads">
+  </a>
+</p>
 
 ---
 
@@ -137,4 +145,3 @@ This project is licensed under the [MIT License](LICENSE).
 <div align="center">
   <em>Built for researchers, writers, and academics who deserve frictionless citations. 🐼</em>
 </div>
-```
