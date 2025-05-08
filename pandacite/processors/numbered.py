@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from urllib.parse import urlparse
 from docx import Document
+from docx.shared import Pt
 
 
 class NumberedCitationProcessor:
@@ -124,7 +125,15 @@ class NumberedCitationProcessor:
         try:
             # Add bibliography section
             document.add_page_break()
-            document.add_heading("References", level=1)
+            try:
+                document.add_heading("References", level=1)
+            except Exception as e:
+                print(f"Warning: Could not add styled heading: {e}")
+                # Alternative: just add a paragraph with "References"
+                p = document.add_paragraph("References")
+                run = p.runs[0]
+                run.bold = True
+                run.font.size = Pt(16)  # Approximation of heading size
             
             # Get formatter
             formatter = self.citation_manager.formatters.get(format_name.lower())
