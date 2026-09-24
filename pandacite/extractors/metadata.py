@@ -10,6 +10,39 @@ from datetime import datetime
 from urllib.parse import urlparse
 from docx import Document
 
+# Network defaults: never hang forever, and identify ourselves (Crossref "polite pool")
+REQUEST_TIMEOUT = 15
+USER_AGENT = "PandaCite (https://github.com/pritampanda15/pandacite)"
+
+
+def _get(url: str, **kwargs) -> requests.Response:
+    """requests.get with a default timeout and User-Agent"""
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+    headers = kwargs.pop("headers", None) or {}
+    headers.setdefault("User-Agent", USER_AGENT)
+    return requests.get(url, headers=headers, **kwargs)
+
+
+def normalize_doi(doi: str) -> str:
+    """Strip URL / 'doi:' prefixes from a DOI"""
+    doi = doi.strip()
+    doi = re.sub(r"^(?:https?://)?(?:dx\.)?doi\.org/", "", doi, flags=re.IGNORECASE)
+    doi = re.sub(r"^doi:\s*", "", doi, flags=re.IGNORECASE)
+    return doi
+
+
+def normalize_arxiv_id(arxiv_id: str) -> str:
+    """Strip 'arXiv:' prefix and trailing version (e.g. v2) from an arXiv ID"""
+    arxiv_id = re.sub(r"^arxiv:\s*", "", arxiv_id.strip(), flags=re.IGNORECASE)
+    return re.sub(r"v\d+$", "", arxiv_id)
+
+
+def _first(value, default=""):
+    """First element of a list, or the value itself if not a list"""
+    if isinstance(value, list):
+        return value[0] if value else default
+    return value if value is not None else default
+
 
 class EnhancedMetadataExtractor:
     """Enhanced metadata extractor with support for more sources"""
@@ -22,11 +55,12 @@ class EnhancedMetadataExtractor:
     
     def extract_from_doi(self, doi: str) -> Optional[Dict[str, Any]]:
         """Extract metadata from a DOI using the Crossref API"""
+        doi = normalize_doi(doi)
         url = f"https://api.crossref.org/works/{doi}"
         headers = {"Accept": "application/json"}
         
         try:
-            response = requests.get(url, headers=headers)
+            response = _get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
             
@@ -45,7 +79,7 @@ class EnhancedMetadataExtractor:
         url = f"https://api.datacite.org/dois/{doi}"
         
         try:
-            response = requests.get(url)
+            response = _get(url)
             response.raise_for_status()
             data = response.json()
             
@@ -66,7 +100,7 @@ class EnhancedMetadataExtractor:
         }
         
         try:
-            response = requests.get(base_url, params=params)
+            response = _get(base_url, params=params)
             response.raise_for_status()
             data = response.json()
             
@@ -79,14 +113,11 @@ class EnhancedMetadataExtractor:
     
     def extract_from_arxiv(self, arxiv_id: str) -> Optional[Dict[str, Any]]:
         """Extract metadata from an arXiv ID using the arXiv API"""
-        # Clean the arXiv ID (remove version if present)
-        if "v" in arxiv_id:
-            arxiv_id = arxiv_id.split("v")[0]
-        
-        url = f"http://export.arxiv.org/api/query?id_list={arxiv_id}"
+        arxiv_id = normalize_arxiv_id(arxiv_id)
+        url = f"https://export.arxiv.org/api/query?id_list={arxiv_id}"
         
         try:
-            response = requests.get(url)
+            response = _get(url)
             response.raise_for_status()
             
             # Parse the XML response
@@ -105,10 +136,11 @@ class EnhancedMetadataExtractor:
     
     def extract_from_isbn(self, isbn: str) -> Optional[Dict[str, Any]]:
         """Extract metadata from an ISBN using the Open Library API"""
+        isbn = re.sub(r"[^0-9Xx]", "", re.sub(r"^ISBN(?:-1[03])?:?", "", isbn.strip(), flags=re.IGNORECASE)).upper()
         url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
         
         try:
-            response = requests.get(url)
+            response = _get(url)
             response.raise_for_status()
             data = response.json()
             
@@ -124,6 +156,8 @@ class EnhancedMetadataExtractor:
 
     def extract_from_url(self, url: str) -> Optional[Dict[str, Any]]:
         """Extract metadata from a URL"""
+        if url.startswith("www."):
+            url = "https://" + url
         # Direct Science.org DOI extraction - no HTTP request needed
         if "science.org/doi/" in url or "sciencemag.org/doi/" in url:
             # Pattern to extract DOI directly from Science URLs
@@ -151,7 +185,7 @@ class EnhancedMetadataExtractor:
                 # Try to convert PMC ID to PMID using NCBI's eutils
                 try:
                     convert_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=PMC{pmc_id}[pmcid]&retmode=json"
-                    response = requests.get(
+                    response = _get(
                         convert_url,
                         headers={
                             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -182,7 +216,7 @@ class EnhancedMetadataExtractor:
                     "Upgrade-Insecure-Requests": "1",
                     "Cache-Control": "max-age=0"
                 }
-                response = requests.get(url, headers=headers)
+                response = _get(url, headers=headers)
                 response.raise_for_status()
                 
                 # Use BeautifulSoup to parse if available
@@ -249,18 +283,19 @@ class EnhancedMetadataExtractor:
                 return None
                 
         elif "pubmed.ncbi.nlm.nih.gov" in url:
-            # Extract PMID from PubMed URL
-            pmid = url.split("/")[-1].split("?")[0]
-            return self.extract_from_pmid(pmid)
+            # Extract PMID from PubMed URL (handles trailing slash / query string)
+            pmid_match = re.search(r"pubmed\.ncbi\.nlm\.nih\.gov/(\d+)", url)
+            if pmid_match:
+                return self.extract_from_pmid(pmid_match.group(1))
         elif "doi.org" in url:
             # Extract DOI from DOI URL
             doi = url.split("doi.org/")[-1]
             return self.extract_from_doi(doi)
         elif "arxiv.org" in url:
-            # Extract arXiv ID from arXiv URL
-            if "abs" in url:
-                arxiv_id = url.split("abs/")[-1].split("v")[0]
-                return self.extract_from_arxiv(arxiv_id)
+            # Extract arXiv ID from arXiv abs/pdf URL
+            arxiv_match = re.search(r"arxiv\.org/(?:abs|pdf)/([^?#]+?)(?:\.pdf)?(?:[?#]|$)", url)
+            if arxiv_match:
+                return self.extract_from_arxiv(arxiv_match.group(1))
         
         # Generic URL handling - use web scraping with meta tags
         return self._extract_from_generic_url_with_headers(url)
@@ -276,7 +311,7 @@ class EnhancedMetadataExtractor:
                 "Referer": "https://www.google.com/",
                 "DNT": "1"
             }
-            response = requests.get(url, headers=headers)
+            response = _get(url, headers=headers)
             response.raise_for_status()
             
             # Check for DOI in the URL or page content
@@ -364,7 +399,7 @@ class EnhancedMetadataExtractor:
     def _extract_from_generic_url(self, url: str) -> Optional[Dict[str, Any]]:
         """Extract metadata from a generic URL using meta tags"""
         try:
-            response = requests.get(url)
+            response = _get(url)
             response.raise_for_status()
             
             # Use BeautifulSoup to parse HTML if available
@@ -447,10 +482,10 @@ class EnhancedMetadataExtractor:
     def _parse_crossref_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse Crossref API response into standardized metadata format"""
         metadata = {
-            "title": data.get("title", [""])[0] if isinstance(data.get("title", []), list) else data.get("title", ""),
+            "title": _first(data.get("title")),
             "authors": [],
-            "journal": data.get("container-title", [""])[0] if isinstance(data.get("container-title", []), list) else "",
-            "year": str(data.get("published", {}).get("date-parts", [[""]])[0][0]) if "published" in data else "",
+            "journal": _first(data.get("container-title")),
+            "year": self._crossref_year(data),
             "volume": data.get("volume", ""),
             "issue": data.get("issue", ""),
             "pages": data.get("page", ""),
@@ -482,16 +517,25 @@ class EnhancedMetadataExtractor:
         
         return metadata
     
+    @staticmethod
+    def _crossref_year(data: Dict[str, Any]) -> str:
+        """Publication year from the first Crossref date field that has one"""
+        for field in ("published", "published-print", "published-online", "issued"):
+            parts = data.get(field, {}).get("date-parts") or [[]]
+            if parts[0] and parts[0][0]:
+                return str(parts[0][0])
+        return ""
+
     def _parse_datacite_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse DataCite API response into standardized metadata format"""
         metadata = {
-            "title": data.get("title", ""),
+            "title": _first(data.get("titles"), {}).get("title", "") if data.get("titles") else data.get("title", ""),
             "authors": [],
-            "year": data.get("publicationYear", ""),
+            "year": str(data.get("publicationYear") or ""),
             "doi": data.get("doi", ""),
             "url": f"https://doi.org/{data.get('doi', '')}",
             "publisher": data.get("publisher", ""),
-            "type": data.get("resourceType", {}).get("resourceTypeGeneral", ""),
+            "type": (data.get("types") or data.get("resourceType") or {}).get("resourceTypeGeneral", ""),
         }
         
         # Extract authors
@@ -522,7 +566,7 @@ class EnhancedMetadataExtractor:
     def _parse_pubmed_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse PubMed API response into standardized metadata format"""
         metadata = {
-            "title": data.get("title", ""),
+            "title": data.get("title", "").rstrip("."),  # PubMed titles end with a period
             "authors": [],
             "journal": data.get("fulljournalname", "") or data.get("source", ""),
             "year": data.get("pubdate", "").split()[0] if data.get("pubdate", "") else "",

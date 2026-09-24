@@ -10,6 +10,9 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from urllib.parse import urlparse
 from docx import Document
+from docx.shared import Pt
+
+
 class CommandLineWordProcessor:
     """Process Word documents for citation management in command-line mode"""
     
@@ -104,13 +107,26 @@ class CommandLineWordProcessor:
                             "source_text": f"{author.strip()} et al."
                         }
         
-        # Look for DOIs, PMIDs, arXiv IDs, and URLs in the text
+        # PMIDs must be explicitly labelled ("PMID: 12345"); bare numbers in prose
+        # are years, figure numbers, [1]-style references, etc.
+        for match in re.finditer(r"\bPMID:?\s*(\d{1,8})\b", text, re.IGNORECASE):
+            pmid = match.group(1)
+            citation_key = f"pmid-{pmid}"
+            if citation_key not in citations:
+                citations[citation_key] = {
+                    "id_type": "pmid",
+                    "id_value": pmid,
+                    "pattern": "direct_id",
+                    "source_text": match.group(0)
+                }
+        
+        # Look for DOIs, arXiv IDs, ISBNs and URLs in the text
         words = text.split()
         for word in words:
             word = word.strip(".,;()[]{}\"'")
             if word:
                 id_type = id_detector.detect_id_type(word)
-                if id_type != "unknown":
+                if id_type not in ("unknown", "pmid"):
                     citation_key = f"{id_type}-{word}"
                     if citation_key not in citations:
                         citations[citation_key] = {
@@ -254,15 +270,7 @@ class CommandLineWordProcessor:
                     paragraph.style = 'Normal'  # This will always exist
                     run = paragraph.runs[0]
                     run.bold = True
-                    run.font.size = Pt(14)  # Approximation of heading size
-                    
-                    # Try to set font size if possible
-                    try:
-                        from docx.shared import Pt
-                        run.font.size = Pt(16)  # Approximate size for Heading 1
-                    except ImportError:
-                        # If docx.shared is not available, just use bold
-                        pass
+                    run.font.size = Pt(16)  # Approximate size for Heading 1
                 except Exception as e2:
                     # Method 3: Last resort - just add plain text
                     print(f"Warning: Could not add bold heading: {e2}")

@@ -18,4 +18,5 @@ class PMIDParser:
     
     def parse(self, pmid: str) -> Optional[Dict[str, Any]]:
         """Parse a PMID and return metadata"""
+        pmid = re.sub(r"^PMID:?\s*", "", pmid.strip(), flags=re.IGNORECASE)
         return self.extractor.extract_from_pmid(pmid)
