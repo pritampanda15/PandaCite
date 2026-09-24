@@ -53,13 +53,18 @@ class NumberedCitationProcessor:
         return self.citations_order
     
     def _collect_citations_from_text(self, text, citations):
-        """Collect citations from text and assign numbers"""
-        for citation_key, citation in citations.items():
-            if "source_text" in citation and citation["source_text"] in text:
-                # Check if we have metadata for this citation
-                if "metadata_key" in citation and citation["metadata_key"] not in self.citations_order:
-                    self.citations_order[citation["metadata_key"]] = self.current_number
-                    self.current_number += 1
+        """Collect citations from text and assign numbers in order of first appearance"""
+        found = []
+        for citation in citations.values():
+            if "source_text" in citation and "metadata_key" in citation:
+                position = text.find(citation["source_text"])
+                if position != -1:
+                    found.append((position, citation["metadata_key"]))
+        
+        for _, metadata_key in sorted(found):
+            if metadata_key not in self.citations_order:
+                self.citations_order[metadata_key] = self.current_number
+                self.current_number += 1
     
     def format_in_text_citations(self, document, citations, citation_numbers):
         """

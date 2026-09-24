@@ -28,15 +28,18 @@ class IDDetector:
         identifier = identifier.strip()
         
         # Check if it's a DOI
-        if identifier.startswith("10.") or "doi.org" in identifier.lower():
+        if (identifier.startswith("10.") or "doi.org" in identifier.lower()
+                or identifier.lower().startswith("doi:")):
             return "doi"
         
         # Check if it's a PMID
         if identifier.isdigit() and len(identifier) <= 8:
             return "pmid"
+        if re.match(r"^PMID:?\s*\d{1,8}$", identifier, re.IGNORECASE):
+            return "pmid"
         
         # Check if it's an arXiv ID
-        if (identifier.startswith("arXiv:") or 
+        if (identifier.lower().startswith("arxiv:") or 
             (re.match(r"\d{4}\.\d{4,5}", identifier)) or 
             (re.match(r"\d{7}", identifier) and len(identifier) == 7)):
             return "arxiv"

@@ -30,6 +30,40 @@ class URLParser:
         """Parse a URL and return metadata"""
         return self.extractor.extract_from_url(url)
 
+def _bibtex_fields(bibtex: str) -> List[Tuple[str, str]]:
+    """Extract (name, value) pairs; values may be {nested {braces}}, "quoted" or bare"""
+    fields = []
+    field_start = re.compile(r'(\w+)\s*=\s*')
+    match = field_start.search(bibtex)
+    while match:
+        pos = match.end()
+        if pos >= len(bibtex):
+            break
+        opener = bibtex[pos]
+        if opener == "{":
+            depth, end = 0, pos
+            while end < len(bibtex):
+                if bibtex[end] == "{":
+                    depth += 1
+                elif bibtex[end] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                end += 1
+            value = bibtex[pos + 1:end]
+        elif opener == '"':
+            end = bibtex.find('"', pos + 1)
+            end = len(bibtex) if end == -1 else end
+            value = bibtex[pos + 1:end]
+        else:
+            value = re.match(r'[^,}\s]*', bibtex[pos:]).group(0)
+            end = pos + len(value)
+        # Drop protective inner braces: {The {DNA} story} -> The DNA story
+        fields.append((match.group(1), re.sub(r"\s+", " ", value.replace("{", "").replace("}", "")).strip()))
+        match = field_start.search(bibtex, end + 1)
+    return fields
+
+
 class BibTexParser:
     """Parse BibTeX entries to extract metadata"""
     
@@ -51,8 +85,7 @@ class BibTexParser:
                 metadata["id"] = entry_key
             
             # Extract fields
-            field_pattern = re.compile(r'(\w+)\s*=\s*[{"]([^}"]*)["}\s]*[,]?')
-            for field, value in field_pattern.findall(bibtex):
+            for field, value in _bibtex_fields(bibtex):
                 field = field.lower()
                 
                 if field == "author":
@@ -117,6 +150,8 @@ class RISParser:
                 "authors": []
             }
             
+            start_page = end_page = ""
+            
             # Split the RIS string into lines
             lines = ris.strip().split("\n")
             
@@ -159,16 +194,10 @@ class RISParser:
                     metadata["issue"] = value
                 elif tag == "SP":
                     # Start page
-                    if "pages" not in metadata:
-                        metadata["pages"] = value
-                    else:
-                        metadata["pages"] = f"{value}-{metadata['pages']}"
+                    start_page = value
                 elif tag == "EP":
                     # End page
-                    if "pages" not in metadata:
-                        metadata["pages"] = f"-{value}"
-                    else:
-                        metadata["pages"] = f"{metadata['pages']}-{value}"
+                    end_page = value
                 elif tag == "PY" or tag == "Y1":
                     # Publication year
                     if "/" in value:
@@ -193,6 +222,9 @@ class RISParser:
                     if "keywords" not in metadata:
                         metadata["keywords"] = []
                     metadata["keywords"].append(value)
+            
+            if start_page or end_page:
+                metadata["pages"] = "-".join(p for p in (start_page, end_page) if p)
             
             # Ensure essential fields are present
             for field in ["title", "authors", "year"]:

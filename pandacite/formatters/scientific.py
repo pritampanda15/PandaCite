@@ -961,7 +961,7 @@ class ACMFormatter(BaseCitationFormatter):
                     first_name = parts[1].strip()
                     # Get initials
                     initials = " ".join([name[0] + "." for name in first_name.split()])
-                    formatted_authors.append(f"{first_name[0]}. {last_name}")
+                    formatted_authors.append(f"{initials} {last_name}" if initials else last_name)
                 else:
                     formatted_authors.append(author)
             
@@ -1016,7 +1016,7 @@ class OxfordFormatter(BaseCitationFormatter):
                 if len(parts) == 2:
                     last_name = parts[0].strip()
                     first_name = parts[1].strip()
-                    formatted_authors.append(f"{last_name}, {first_name[0]}.")
+                    formatted_authors.append(f"{last_name}, {first_name[0]}." if first_name else last_name)
                 else:
                     formatted_authors.append(author)
             
@@ -1179,8 +1179,8 @@ class AIPFormatter(BaseCitationFormatter):
                     last_name = parts[0].strip()
                     first_name = parts[1].strip()
                     # Get initials with spaces
-                    initials = " ".join([name[0] + "." for name in first_name.split()]) 
-                    formatted_authors.append(f"{first_name[0]}. {last_name}")
+                    initials = " ".join([name[0] + "." for name in first_name.split()])
+                    formatted_authors.append(f"{initials} {last_name}" if initials else last_name)
                 else:
                     formatted_authors.append(author)
             

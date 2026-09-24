@@ -71,7 +71,7 @@ from pandacite.parsers import (
     BibTexParser,
     RISParser
 )
-from pandacite.extractors.metadata import EnhancedMetadataExtractor
+from pandacite.extractors.metadata import EnhancedMetadataExtractor, REQUEST_TIMEOUT, USER_AGENT
 from pandacite.extractors.detector import IDDetector
 from pandacite.processors.word import CommandLineWordProcessor
 from pandacite.processors.numbered import NumberedCitationProcessor
@@ -278,11 +278,12 @@ def main():
             
             if args.bibtex:
                 if citation_manager.export_bibtex(args.bibtex):
-                    print_panda_message(f"Failed to export citation to {args.output}", "sad")
+                    print_panda_message(f"BibTeX exported to {args.bibtex}", "happy")
                 else:
-                    print_panda_message(f"Failed to export citation to {args.output}", "sad")
+                    print_panda_message(f"Failed to export BibTeX to {args.bibtex}", "sad")
         else:
             print_panda_message(f"Failed to generate citation for {args.id_type} {args.id}", "error")
+            return 1
     
     elif args.command == "batch":
         # Process multiple citations
@@ -292,7 +293,7 @@ def main():
             citations = citation_manager.process_batch_citations(args.ids, args.id_type, args.format)
         else:
             print("Error: Either --ids or --file must be provided for batch processing")
-            return
+            return 2
         
         if citations:
             print(f"\nGenerated {len(citations)} citations:")
@@ -312,10 +313,11 @@ def main():
                     print(f"\nFailed to export BibTeX to {args.bibtex}")
         else:
             print("\nNo citations generated")
+            return 1
     
     elif args.command == "word":
         # Process Word document
-        print_panda_message(f"Failed to generate citation for {args.id_type} {args.id}", "error")
+        print_panda_message("Processing Word document...", "working")
         handle_word_command(args, citation_manager)
     
     elif args.command == "interactive":
@@ -358,14 +360,14 @@ def handle_word_command(args, citation_manager):
     document, citations = word_processor.process_document(args.input, args.format, id_detector)
     
     # Extract metadata for citations
-    show_panda_progress("Extracting metadata from citations", 15, 0.1)
+    print("Extracting metadata from citations...")
     extracted_metadata = {}
     citation_lookup = {}  # Map source_text to metadata keys
     
     # Load identifiers from file if provided
     identifiers = []
     if args.id_list and os.path.exists(args.id_list):
-        with open(args.id_list, "r") as file:
+        with open(args.id_list, "r", encoding="utf-8") as file:
             identifiers = [line.strip() for line in file if line.strip()]
         
         for identifier in identifiers:
@@ -449,8 +451,12 @@ def handle_word_command(args, citation_manager):
                     search_query = f"{citation['author']} {citation['year']}"
                     
                     # Try to make a naive DOI search via Crossref
-                    search_url = f"https://api.crossref.org/works?query={search_query.replace(' ', '+')}&rows=1"
-                    response = requests.get(search_url)
+                    response = requests.get(
+                        "https://api.crossref.org/works",
+                        params={"query": search_query, "rows": 1},
+                        headers={"User-Agent": USER_AGENT},
+                        timeout=REQUEST_TIMEOUT,
+                    )
                     data = response.json()
                     
                     if "message" in data and "items" in data["message"] and data["message"]["items"]:
@@ -549,9 +555,7 @@ def handle_word_command(args, citation_manager):
                 print(f"Document saved to {args.output} with numbered citations")
                 return
             except Exception as e:
-                print(f"Error saving document with numbered citations: {e}")
-                print_panda_message(f"Document saved to {args.output}", "done")
-                # Continue to standard processing as fallback
+                print_panda_message(f"Error saving document with numbered citations: {e}", "error")
         else:
             # Standard processing for non-numbered styles
             word_processor.update_document_with_citations(
@@ -792,4 +796,4 @@ def get_valid_input(prompt, validator, default=None):
         print("Invalid input. Please try again.")
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

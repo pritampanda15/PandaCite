@@ -215,7 +215,7 @@ class EnhancedCitationManager:
             List of formatted citations
         """
         try:
-            with open(file_path, "r") as file:
+            with open(file_path, "r", encoding="utf-8") as file:
                 ids = [line.strip() for line in file if line.strip()]
             return self.process_batch_citations(ids, id_type, format_name)
         except Exception as e:
@@ -234,7 +234,7 @@ class EnhancedCitationManager:
             True if successful, False otherwise
         """
         try:
-            with open(output_path, "w") as file:
+            with open(output_path, "w", encoding="utf-8") as file:
                 for citation in citations:
                     file.write(citation + "\n\n")
             return True
@@ -253,16 +253,17 @@ class EnhancedCitationManager:
             True if successful, False otherwise
         """
         try:
-            with open(output_path, "w") as file:
+            used_keys = set()
+            with open(output_path, "w", encoding="utf-8") as file:
                 for key, metadata in self.citation_data.items():
-                    bibtex_entry = self._convert_to_bibtex(key, metadata)
+                    bibtex_entry = self._convert_to_bibtex(key, metadata, used_keys)
                     file.write(bibtex_entry + "\n\n")
             return True
         except Exception as e:
             print(f"Error exporting BibTeX: {e}")
             return False
     
-    def _convert_to_bibtex(self, key: str, metadata: Dict[str, Any]) -> str:
+    def _convert_to_bibtex(self, key: str, metadata: Dict[str, Any], used_keys: Optional[set] = None) -> str:
         """
         Convert metadata to BibTeX format
         
@@ -289,6 +290,14 @@ class EnhancedCitationManager:
             bibtex_key = f"{first_author}{metadata.get('year', '')}"
         else:
             bibtex_key = f"citation{key}"
+        # BibTeX keys cannot contain spaces, commas, braces, etc.
+        bibtex_key = re.sub(r"[^A-Za-z0-9_:.-]", "", bibtex_key) or "citation"
+        if used_keys is not None:
+            base_key, suffix = bibtex_key, ord("a")
+            while bibtex_key in used_keys:
+                bibtex_key = f"{base_key}{chr(suffix)}"
+                suffix += 1
+            used_keys.add(bibtex_key)
         
         # Start building the BibTeX entry
         bibtex = f"@{entry_type}{{{bibtex_key},\n"
