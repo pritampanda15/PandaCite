@@ -333,6 +333,18 @@ def main():
 
 # Add this to the handle_word_command function in complete_citation_manager.py
 
+def _store_metadata(extracted_metadata, key, metadata):
+    """Store metadata, reusing the existing key if the same DOI was already found
+    (e.g. one paper cited by both its DOI and its PMID). Returns the key used."""
+    doi = (metadata.get("doi") or "").lower()
+    if doi:
+        for existing_key, existing in extracted_metadata.items():
+            if (existing.get("doi") or "").lower() == doi:
+                return existing_key
+    extracted_metadata[key] = metadata
+    return key
+
+
 def handle_word_command(args, citation_manager):
     """Handle the word document processing command"""
     if not args.input or not os.path.exists(args.input):
@@ -380,8 +392,7 @@ def handle_word_command(args, citation_manager):
             metadata = citation_manager.extract_metadata(id_type, identifier)
             
             if metadata:
-                key = f"{id_type}-{identifier}-metadata"
-                extracted_metadata[key] = metadata
+                key = _store_metadata(extracted_metadata, f"{id_type}-{identifier}-metadata", metadata)
                 
                 # Create default source text for this citation
                 if "authors" in metadata and metadata["authors"] and "year" in metadata:
@@ -406,8 +417,7 @@ def handle_word_command(args, citation_manager):
             metadata = citation_manager.extract_metadata(id_type, id_value)
             
             if metadata:
-                key = f"{id_type}-{id_value}-metadata"
-                extracted_metadata[key] = metadata
+                key = _store_metadata(extracted_metadata, f"{id_type}-{id_value}-metadata", metadata)
                 citation_lookup[citation["source_text"].lower()] = key
                 print(f"  Extracted metadata for {id_type} {id_value}")
     
@@ -467,8 +477,7 @@ def handle_word_command(args, citation_manager):
                             metadata = citation_manager.metadata_extractor.extract_from_doi(doi)
                             
                             if metadata:
-                                key = f"doi-{doi}-metadata"
-                                extracted_metadata[key] = metadata
+                                key = _store_metadata(extracted_metadata, f"doi-{doi}-metadata", metadata)
                                 citation_lookup[source_text] = key
                                 print(f"  Successfully retrieved metadata for {citation['source_text']} via DOI search")
                             else:

@@ -117,3 +117,33 @@ def test_word_document_end_to_end(manager, tmp_path):
     text = "\n".join(p.text for p in Document(out).paragraphs)
     assert "10.1038/x" not in text.split("References")[0]
     assert "References" in text
+
+
+def test_pubmed_authors_and_abbreviated_pages():
+    data = {"uid": "1", "title": "T.", "pages": "54-8", "pubdate": "2013 Aug 1",
+            "authors": [{"name": "Zhou XL"}, {"name": "van der Berg A"}, {"name": "COVID Consortium"}]}
+    metadata = md_module.EnhancedMetadataExtractor()._parse_pubmed_data(data)
+    assert metadata["authors"] == ["Zhou, X. L.", "van der Berg, A.", "COVID Consortium"]
+    assert metadata["pages"] == "54-58"
+    assert metadata["title"] == "T"
+
+
+def test_arxiv_entry_gets_datacite_doi():
+    feed = b"""<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+        <id>http://arxiv.org/abs/1706.03762v7</id><title>T</title>
+        <published>2017-06-12T00:00:00Z</published></entry></feed>"""
+    with mock.patch.object(md_module.requests, "get", return_value=fake_response(content=feed)):
+        metadata = md_module.EnhancedMetadataExtractor().extract_from_arxiv("1706.03762")
+    assert metadata["doi"] == "10.48550/arXiv.1706.03762"
+
+
+def test_parenthesised_ids_are_not_double_wrapped(manager):
+    doc = Document()
+    paragraph = doc.add_paragraph("Shown before (10.1/x).")
+    citations = {"c": {"source_text": "10.1/x", "metadata_key": "k"}}
+    CommandLineWordProcessor(manager)._update_paragraph_citations(
+        paragraph, citations, {"k": {"in_text": "(Smith, 2020)"}})
+    assert paragraph.text == "Shown before (Smith, 2020)."
+    paragraph.text = "Shown before (10.1/x)."
+    NumberedCitationProcessor(manager)._update_paragraph_with_numbers(paragraph, citations, {"k": 1})
+    assert paragraph.text == "Shown before [1]."

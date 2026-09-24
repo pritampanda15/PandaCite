@@ -44,6 +44,23 @@ def _first(value, default=""):
     return value if value is not None else default
 
 
+def _pubmed_author(name: str) -> str:
+    """Convert PubMed's "Zhou XL" to "Zhou, X. L." (collective names are left as-is)"""
+    parts = name.rsplit(" ", 1)
+    if len(parts) == 2 and re.fullmatch(r"[A-Z]{1,4}", parts[1]):
+        return f"{parts[0]}, {' '.join(c + '.' for c in parts[1])}"
+    return name
+
+
+def _expand_pages(pages: str) -> str:
+    """Expand abbreviated page ranges: "54-8" -> "54-58"""
+    match = re.fullmatch(r"(\d+)-(\d+)", pages or "")
+    if match and len(match.group(2)) < len(match.group(1)):
+        start, end = match.groups()
+        return f"{start}-{start[:len(start) - len(end)]}{end}"
+    return pages
+
+
 class EnhancedMetadataExtractor:
     """Enhanced metadata extractor with support for more sources"""
     
@@ -572,7 +589,7 @@ class EnhancedMetadataExtractor:
             "year": data.get("pubdate", "").split()[0] if data.get("pubdate", "") else "",
             "volume": data.get("volume", ""),
             "issue": data.get("issue", ""),
-            "pages": data.get("pages", ""),
+            "pages": _expand_pages(data.get("pages", "")),
             "doi": next((id_data.get("value", "") for id_data in data.get("articleids", []) 
                          if id_data.get("idtype", "") == "doi"), ""),
             "pmid": next((id_data.get("value", "") for id_data in data.get("articleids", []) 
@@ -586,7 +603,7 @@ class EnhancedMetadataExtractor:
         if "authors" in data and isinstance(data["authors"], list):
             for author in data["authors"]:
                 if "name" in author:
-                    metadata["authors"].append(author["name"])
+                    metadata["authors"].append(_pubmed_author(author["name"]))
         
         # Extract abstract if available
         if "bookabstract" in data and data["bookabstract"]:
@@ -640,7 +657,9 @@ class EnhancedMetadataExtractor:
         
         # Get the arXiv ID
         id_element = entry.find("atom:id", ns)
-        arxiv_id = id_element.text.split("/")[-1] if id_element is not None else ""
+        arxiv_id = id_element.text.split("abs/")[-1] if id_element is not None else ""
+        if arxiv_id and not doi:
+            doi = f"10.48550/arXiv.{normalize_arxiv_id(arxiv_id)}"
         
         # Get the categories (subjects)
         categories = []

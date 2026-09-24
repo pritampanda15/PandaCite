@@ -281,9 +281,8 @@ class CommandLineWordProcessor:
                 print(f"Adding {len(ordered_citations)} citations to bibliography")
                 for i, (citation_key, bibliography) in enumerate(ordered_citations, 1):
                     try:
-                        paragraph = document.add_paragraph()
-                        # Add number for numbered citations
-                        paragraph.text = f"{i}. {bibliography}"
+                        # Author-year styles: alphabetical, unnumbered (numbered styles use NumberedCitationProcessor)
+                        document.add_paragraph(bibliography)
                         print(f"Added bibliography entry {i}: {bibliography[:80]}...")
                     except Exception as e:
                         print(f"Warning: Could not add bibliography entry for {citation_key}: {e}")
@@ -350,6 +349,9 @@ class CommandLineWordProcessor:
                     
                     # Only replace if we have something valid
                     if formatted_citation:
+                        # "(10.1/x)" -> "(Smith, 2020)", not "((Smith, 2020))"
+                        if formatted_citation.startswith("("):
+                            updated_text = updated_text.replace(f"({citation['source_text']})", formatted_citation)
                         updated_text = updated_text.replace(
                             citation["source_text"], 
                             formatted_citation

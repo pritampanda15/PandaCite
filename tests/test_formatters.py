@@ -27,3 +27,9 @@ def test_formatter_does_not_crash(style, case):
 def test_all_initials_kept(style):
     citation = FORMATTERS[style].format_citation(CASES["full"])
     assert "J. A. Smith" in citation
+
+
+def test_apa_author_list():
+    metadata = {"authors": ["Devlin, Jacob", "Chang, Ming-Wei", "Lukin, M. D."], "year": "2018", "title": "T"}
+    assert FORMATTERS["apa"].format_citation(metadata).startswith(
+        "Devlin, J., Chang, M., & Lukin, M. D. (2018). T.")

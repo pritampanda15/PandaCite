@@ -17,20 +17,18 @@ class APAFormatter(BaseCitationFormatter):
         """Format metadata into an APA-style citation"""
         # Format authors
         if metadata.get("authors"):
-            if len(metadata["authors"]) > 7:
-                authors = ", ".join(metadata["authors"][:6]) + ", ... " + metadata["authors"][-1]
+            names = [self._format_author(author) for author in metadata["authors"]]
+            if len(names) > 7:
+                authors = ", ".join(names[:6]) + ", ... " + names[-1]
+            elif len(names) > 1:
+                authors = ", ".join(names[:-1]) + ", & " + names[-1]
             else:
-                authors = ", ".join(metadata["authors"])
-            
-            # Replace last comma with "&"
-            last_comma_index = authors.rfind(",")
-            if last_comma_index != -1:
-                authors = authors[:last_comma_index] + " &" + authors[last_comma_index+1:]
+                authors = names[0]
         else:
             authors = "Anonymous"
         
         # Build the citation
-        citation = f"{authors}. ({metadata.get('year', '')}). {metadata.get('title', '')}. "
+        citation = f"{authors.rstrip('.')}. ({metadata.get('year', '')}). {metadata.get('title', '')}. "
         
         if metadata.get("journal"):
             citation += f"{metadata.get('journal', '')}"
@@ -50,6 +48,15 @@ class APAFormatter(BaseCitationFormatter):
             citation += f" https://doi.org/{metadata.get('doi', '')}"
         
         return citation
+    
+    @staticmethod
+    def _format_author(author: str) -> str:
+        """ "Smith, John Adam" -> "Smith, J. A." """
+        if "," not in author:
+            return author
+        last, given = author.split(",", 1)
+        initials = " ".join(name[0] + "." for name in given.replace(".", " ").split())
+        return f"{last.strip()}, {initials}" if initials else last.strip()
     
     def format_in_text_citation(self, metadata: Dict[str, Any]) -> str:
         """Format in-text citation for APA"""

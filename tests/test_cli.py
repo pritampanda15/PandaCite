@@ -46,3 +46,19 @@ def test_word_command_runs(tmp_path):
     text = "\n".join(p.text for p in Document(out).paragraphs)
     assert "See [1] for details." in text
     assert "1. Smith" in text
+
+
+def test_word_command_merges_same_paper_cited_by_doi_and_pmid(tmp_path):
+    src, out = tmp_path / "in.docx", tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("By DOI (10.1038/x) and by PMID (PMID: 123).")
+    doc.save(src)
+    with mock.patch("pandacite.extractors.metadata.EnhancedMetadataExtractor.extract_from_doi",
+                    return_value=dict(METADATA)), \
+         mock.patch("pandacite.extractors.metadata.EnhancedMetadataExtractor.extract_from_pmid",
+                    return_value=dict(METADATA)):
+        run_cli("word", "-i", str(src), "-o", str(out), "-f", "apa")
+    paragraphs = [p.text for p in Document(out).paragraphs if p.text]
+    assert paragraphs[0] == "By DOI (Smith, 2020) and by PMID (Smith, 2020)."
+    references = paragraphs[paragraphs.index("References") + 1:]
+    assert references == ["Smith, J. (2020). T. J. https://doi.org/10.1038/x"]

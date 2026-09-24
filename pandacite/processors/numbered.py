@@ -105,6 +105,8 @@ class NumberedCitationProcessor:
             if "source_text" in citation and citation["source_text"] in text:
                 if "metadata_key" in citation and citation["metadata_key"] in citation_numbers:
                     number = citation_numbers[citation["metadata_key"]]
+                    # "(10.1/x)" -> "[1]", not "([1])"
+                    updated_text = updated_text.replace(f"({citation['source_text']})", f"[{number}]")
                     updated_text = updated_text.replace(
                         citation["source_text"],
                         f"[{number}]"
