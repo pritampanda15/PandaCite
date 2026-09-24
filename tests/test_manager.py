@@ -147,3 +147,102 @@ def test_parenthesised_ids_are_not_double_wrapped(manager):
     paragraph.text = "Shown before (10.1/x)."
     NumberedCitationProcessor(manager)._update_paragraph_with_numbers(paragraph, citations, {"k": 1})
     assert paragraph.text == "Shown before [1]."
+
+
+def _add_hyperlink(paragraph, url, text):
+    from docx.opc.constants import RELATIONSHIP_TYPE
+    from docx.oxml.shared import OxmlElement, qn
+    link = OxmlElement("w:hyperlink")
+    link.set(qn("r:id"), paragraph.part.relate_to(url, RELATIONSHIP_TYPE.HYPERLINK, is_external=True))
+    run, t = OxmlElement("w:r"), OxmlElement("w:t")
+    t.text = text
+    run.append(t)
+    link.append(run)
+    paragraph._p.append(link)
+
+
+def _add_field_hyperlink(paragraph, url, text):
+    from docx.oxml.shared import OxmlElement, qn
+    for kind, instr, result in (("begin", None, None), (None, f' HYPERLINK "{url}" ', None),
+                                ("separate", None, None), (None, None, text), ("end", None, None)):
+        run = OxmlElement("w:r")
+        if kind:
+            char = OxmlElement("w:fldChar")
+            char.set(qn("w:fldCharType"), kind)
+            run.append(char)
+        else:
+            node = OxmlElement("w:instrText" if instr else "w:t")
+            node.text = instr or result
+            run.append(node)
+        paragraph._p.append(run)
+
+
+def test_extract_hyperlinks_elements_and_field_codes():
+    from pandacite.processors.word import extract_hyperlinks
+    paragraph = Document().add_paragraph("Shown before (")
+    _add_hyperlink(paragraph, "https://pubmed.ncbi.nlm.nih.gov/1/?utm_source=chatgpt.com", "Yip et al., 2013")
+    paragraph.add_run("; ")
+    _add_field_hyperlink(paragraph, "https://pubmed.ncbi.nlm.nih.gov/2/", "Jurd et al., 2003")
+    paragraph.add_run(").")
+    assert extract_hyperlinks(paragraph) == {
+        "Yip et al., 2013": "https://pubmed.ncbi.nlm.nih.gov/1/",
+        "Jurd et al., 2003": "https://pubmed.ncbi.nlm.nih.gov/2/",
+    }
+
+
+def test_author_year_groups_are_split_and_linked(manager):
+    citations = {}
+    CommandLineWordProcessor(manager)._process_text_for_citations(
+        "Known (Yip et al., 2013;\xa0Panda and Bertaccini, 2026) but not (EC = 0.47 μM) or (see 2003).",
+        citations, IDDetector(), {"Yip et al., 2013": "https://pubmed.ncbi.nlm.nih.gov/1/"})
+    assert {k: c for k, c in citations.items() if c["pattern"] == "author_year"} == {
+        "Yip et al.-2013": {"author": "Yip et al.", "year": "2013", "pattern": "author_year",
+                            "source_text": "Yip et al., 2013", "id_type": "url",
+                            "id_value": "https://pubmed.ncbi.nlm.nih.gov/1/"},
+        "Panda and Bertaccini-2026": {"author": "Panda and Bertaccini", "year": "2026",
+                                      "pattern": "author_year", "source_text": "Panda and Bertaccini, 2026"},
+    }
+
+
+def test_grouped_citations_render_per_style(manager):
+    citations = {"a": {"pattern": "author_year", "source_text": "Yip et al., 2013", "metadata_key": "ka"},
+                 "b": {"pattern": "author_year", "source_text": "Jurd, 2003", "metadata_key": "kb"}}
+    paragraph = Document().add_paragraph("Known (Yip et al., 2013; Jurd, 2003).")
+    CommandLineWordProcessor(manager)._update_paragraph_citations(
+        paragraph, citations, {"ka": {"in_text": "(Yip et al., 2013)"}, "kb": {"in_text": "(Jurd, 2003)"}})
+    assert paragraph.text == "Known (Yip et al., 2013; Jurd, 2003)."
+
+    doc = Document()
+    doc.add_paragraph("Known (Yip et al., 2013; Jurd, 2003).")
+    processor = NumberedCitationProcessor(manager)
+    numbers = processor.process_document(doc, citations, {}, "science")
+    processor.format_in_text_citations(doc, citations, numbers)
+    assert doc.paragraphs[0].text == "Known (1, 2)."
+
+
+def test_compress_numbers():
+    from pandacite.processors.numbered import compress_numbers
+    assert compress_numbers([3, 1, 2, 5, 6, 9]) == "1–3, 5, 6, 9"
+
+
+def test_ncbi_429_is_retried():
+    limited = fake_response()
+    limited.status_code, limited.headers = 429, {"Retry-After": "0"}
+    ok = fake_response({"result": {"1": {"uid": "1", "title": "T"}}})
+    ok.status_code = 200
+    with mock.patch.object(md_module.requests, "get", side_effect=[limited, ok]) as get, \
+         mock.patch.object(md_module.time, "sleep"):
+        metadata = md_module.EnhancedMetadataExtractor().extract_from_pmid("1")
+    assert get.call_count == 2
+    assert metadata["title"] == "T"
+
+
+def test_pubmed_name_suffix():
+    assert md_module._pubmed_author("Walsh RM Jr") == "Walsh Jr., R. M."
+
+
+def test_crossref_titles_are_cleaned():
+    data = {"message": dict(CROSSREF["message"], title=["Alchemical Free\nEnergy of <i>GABA</i>"])}
+    with mock.patch.object(md_module.requests, "get", return_value=fake_response(data)):
+        metadata = md_module.EnhancedMetadataExtractor().extract_from_doi("10.1038/x")
+    assert metadata["title"] == "Alchemical Free Energy of GABA"

@@ -33,3 +33,12 @@ def test_apa_author_list():
     metadata = {"authors": ["Devlin, Jacob", "Chang, Ming-Wei", "Lukin, M. D."], "year": "2018", "title": "T"}
     assert FORMATTERS["apa"].format_citation(metadata).startswith(
         "Devlin, J., Chang, M., & Lukin, M. D. (2018). T.")
+
+
+def test_science_format():
+    metadata = {"authors": ["Kucsko, Georg", "Maurer, P. C."], "title": "Nanometre-scale thermometry.",
+                "journal": "Nature", "volume": "500", "pages": "54-58", "year": "2013", "doi": "10.1038/x"}
+    assert FORMATTERS["science"].format_citation(metadata) == (
+        "G. Kucsko, P. C. Maurer, Nanometre-scale thermometry. Nature 500, 54–58 (2013). doi: 10.1038/x")
+    metadata["authors"] = [f"Author{i}, A." for i in range(11)]
+    assert FORMATTERS["science"].format_citation(metadata).startswith("A. Author0 et al. Nanometre")

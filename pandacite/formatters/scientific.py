@@ -220,28 +220,26 @@ class ScienceFormatter(BaseCitationFormatter):
     """Format citations in Science style"""
     
     def format_citation(self, metadata: Dict[str, Any]) -> str:
-        """Format metadata into a Science-style citation"""
-        # Format authors
+        """Format metadata into a Science-style citation:
+        G. Kucsko, P. C. Maurer, Title. Nature 500, 54–58 (2013)."""
+        # Format authors: initials first; more than 10 authors -> first author et al.
         if metadata.get("authors"):
-            if len(metadata["authors"]) > 5:
-                authors = ", ".join(metadata["authors"][:5]) + ", et al."
-            else:
-                authors = ", ".join(metadata["authors"])
+            names = [self._initials_first(author) for author in metadata["authors"]]
+            authors = f"{names[0]} et al." if len(names) > 10 else ", ".join(names)
         else:
             authors = "Anonymous"
         
         # Build the citation
-        citation = f"{authors}, "
-        citation += f"{metadata.get('title', '')}. "
+        citation = f"{authors}, " if not authors.endswith(".") else f"{authors} "
+        citation += f"{metadata.get('title', '').rstrip('.')}. "
         
         if metadata.get("journal"):
-            citation += f"{metadata.get('journal', '')}. "
-            
-        if metadata.get("volume"):
-            citation += f"{metadata.get('volume', '')}, "
-            
-        if metadata.get("pages"):
-            citation += f"{metadata.get('pages', '')} "
+            citation += f"{metadata.get('journal', '')}"
+            if metadata.get("volume"):
+                citation += f" {metadata.get('volume', '')}"
+            if metadata.get("pages"):
+                citation += f", {metadata.get('pages', '').replace('-', '–')}"
+            citation += " "
             
         if metadata.get("year"):
             citation += f"({metadata.get('year', '')}). "
@@ -249,7 +247,16 @@ class ScienceFormatter(BaseCitationFormatter):
         if metadata.get("doi"):
             citation += f"doi: {metadata.get('doi', '')}"
         
-        return citation
+        return citation.rstrip()
+    
+    @staticmethod
+    def _initials_first(author: str) -> str:
+        """ "Smith, John Adam" -> "J. A. Smith" """
+        if "," not in author:
+            return author
+        last, given = author.split(",", 1)
+        initials = " ".join(name[0] + "." for name in given.replace(".", " ").split())
+        return f"{initials} {last.strip()}" if initials else last.strip()
     
     def format_in_text_citation(self, metadata: Dict[str, Any]) -> str:
         """Format in-text citation for Science"""

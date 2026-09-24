@@ -10,6 +10,26 @@ from datetime import datetime
 from urllib.parse import urlparse
 from docx import Document
 from docx.shared import Pt
+from pandacite.processors.word import render_author_year_groups
+
+# Styles that put reference numbers in parentheses, "(1)", rather than brackets, "[1]"
+PARENTHESIS_STYLES = {"science"}
+
+
+def compress_numbers(numbers: List[int]) -> str:
+    """[3, 1, 2, 5] -> "1–3, 5" (runs of three or more become ranges)"""
+    numbers = sorted(set(numbers))
+    parts, i = [], 0
+    while i < len(numbers):
+        j = i
+        while j + 1 < len(numbers) and numbers[j + 1] == numbers[j] + 1:
+            j += 1
+        if j - i >= 2:
+            parts.append(f"{numbers[i]}–{numbers[j]}")
+        else:
+            parts.extend(str(n) for n in numbers[i:j + 1])
+        i = j + 1
+    return ", ".join(parts)
 
 
 class NumberedCitationProcessor:
@@ -20,6 +40,7 @@ class NumberedCitationProcessor:
         self.citation_manager = citation_manager
         self.citations_order = {}  # Maps metadata keys to citation numbers
         self.current_number = 1
+        self.brackets = "[]"
     
     def process_document(self, document, citations, extracted_metadata, format_name):
         """
@@ -37,6 +58,7 @@ class NumberedCitationProcessor:
         # Reset numbering
         self.citations_order = {}
         self.current_number = 1
+        self.brackets = "()" if format_name.lower() in PARENTHESIS_STYLES else "[]"
         
         # First, get all unique citations
         for paragraph in document.paragraphs:
@@ -98,19 +120,27 @@ class NumberedCitationProcessor:
     def _update_paragraph_with_numbers(self, paragraph, citations, citation_numbers):
         """Update paragraph with numbered citations"""
         text = paragraph.text
-        updated_text = text
+        open_bracket, close_bracket = self.brackets
         
-        # Replace each citation with its number
+        # Author-year groups: "(A, 2013; B, 2014)" -> "[1, 2]"; unresolved pieces are kept as text
+        def join(parts):
+            numbers = [part for part in parts if isinstance(part, int)]
+            others = [part for part in parts if not isinstance(part, int)]
+            return f"{open_bracket}{', '.join(([compress_numbers(numbers)] if numbers else []) + others)}{close_bracket}"
+        
+        updated_text = render_author_year_groups(
+            text, citations, lambda citation: citation_numbers.get(citation.get("metadata_key")), join)
+        
+        # Replace each remaining (direct identifier) citation with its number
         for citation_key, citation in citations.items():
+            if citation.get("pattern") == "author_year":
+                continue
             if "source_text" in citation and citation["source_text"] in text:
                 if "metadata_key" in citation and citation["metadata_key"] in citation_numbers:
-                    number = citation_numbers[citation["metadata_key"]]
+                    number = f"{open_bracket}{citation_numbers[citation['metadata_key']]}{close_bracket}"
                     # "(10.1/x)" -> "[1]", not "([1])"
-                    updated_text = updated_text.replace(f"({citation['source_text']})", f"[{number}]")
-                    updated_text = updated_text.replace(
-                        citation["source_text"],
-                        f"[{number}]"
-                    )
+                    updated_text = updated_text.replace(f"({citation['source_text']})", number)
+                    updated_text = updated_text.replace(citation["source_text"], number)
         
         # Update the paragraph text if changes were made
         if updated_text != text:

@@ -1,4 +1,5 @@
 import requests
+import time
 import json
 import sys
 import os
@@ -15,12 +16,31 @@ REQUEST_TIMEOUT = 15
 USER_AGENT = "PandaCite (https://github.com/pritampanda15/pandacite)"
 
 
+# NCBI E-utilities allow 3 requests/second without an API key
+NCBI_MIN_INTERVAL = 0.34
+MAX_RETRIES = 3
+_last_ncbi_request = 0.0
+
+
 def _get(url: str, **kwargs) -> requests.Response:
-    """requests.get with a default timeout and User-Agent"""
+    """requests.get with a default timeout and User-Agent, NCBI rate limiting, and
+    retries with backoff on 429/503 responses"""
+    global _last_ncbi_request
     kwargs.setdefault("timeout", REQUEST_TIMEOUT)
     headers = kwargs.pop("headers", None) or {}
     headers.setdefault("User-Agent", USER_AGENT)
-    return requests.get(url, headers=headers, **kwargs)
+    for attempt in range(MAX_RETRIES):
+        if "eutils.ncbi.nlm.nih.gov" in url:
+            wait = NCBI_MIN_INTERVAL - (time.monotonic() - _last_ncbi_request)
+            if wait > 0:
+                time.sleep(wait)
+            _last_ncbi_request = time.monotonic()
+        response = requests.get(url, headers=headers, **kwargs)
+        if response.status_code not in (429, 503) or attempt == MAX_RETRIES - 1:
+            return response
+        retry_after = response.headers.get("Retry-After", "")
+        time.sleep(float(retry_after) if retry_after.isdigit() else 2 ** attempt)
+    return response
 
 
 def normalize_doi(doi: str) -> str:
@@ -45,10 +65,15 @@ def _first(value, default=""):
 
 
 def _pubmed_author(name: str) -> str:
-    """Convert PubMed's "Zhou XL" to "Zhou, X. L." (collective names are left as-is)"""
-    parts = name.rsplit(" ", 1)
+    """Convert PubMed's "Zhou XL" to "Zhou, X. L." and "Walsh RM Jr" to "Walsh Jr., R. M."
+    (collective names are left as-is)"""
+    suffix_match = re.search(r"\s+(Jr|Sr|II|III|IV)\.?$", name)
+    suffix = f" {suffix_match.group(1)}." if suffix_match and suffix_match.group(1) in ("Jr", "Sr") else (
+        f" {suffix_match.group(1)}" if suffix_match else "")
+    base = name[:suffix_match.start()] if suffix_match else name
+    parts = base.rsplit(" ", 1)
     if len(parts) == 2 and re.fullmatch(r"[A-Z]{1,4}", parts[1]):
-        return f"{parts[0]}, {' '.join(c + '.' for c in parts[1])}"
+        return f"{parts[0]}{suffix}, {' '.join(c + '.' for c in parts[1])}"
     return name
 
 
@@ -499,7 +524,8 @@ class EnhancedMetadataExtractor:
     def _parse_crossref_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse Crossref API response into standardized metadata format"""
         metadata = {
-            "title": _first(data.get("title")),
+            # Crossref titles may contain line breaks and JATS markup such as <i>...</i>
+            "title": " ".join(re.sub(r"<[^>]+>", "", _first(data.get("title"))).split()),
             "authors": [],
             "journal": _first(data.get("container-title")),
             "year": self._crossref_year(data),

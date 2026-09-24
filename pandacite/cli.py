@@ -333,6 +333,20 @@ def main():
 
 # Add this to the handle_word_command function in complete_citation_manager.py
 
+def _cited_surnames(author_text):
+    """ "van der Berg et al." -> ["van der Berg"]; "Panda and Bertaccini" -> ["Panda", "Bertaccini"] """
+    author_text = re.sub(r"\s+et al\.?$", "", author_text.strip())
+    return [name.strip() for name in re.split(r"\s+(?:and|&)\s+|,", author_text) if name.strip()]
+
+
+def _crossref_item_matches(item, surnames, year):
+    """True if a Crossref search result's leading authors and year match the citation"""
+    families = [(author.get("family") or "").lower() for author in item.get("author") or []]
+    issued = (item.get("issued", {}).get("date-parts") or [[None]])[0]
+    return (families[:len(surnames)] == [name.lower() for name in surnames]
+            and bool(issued) and str(issued[0]) == year)
+
+
 def _store_metadata(extracted_metadata, key, metadata):
     """Store metadata, reusing the existing key if the same DOI was already found
     (e.g. one paper cited by both its DOI and its PMID). Returns the key used."""
@@ -457,20 +471,25 @@ def handle_word_command(args, citation_manager):
             if not matched:
                 print(f"  No metadata match found for {citation['source_text']}, attempting to search...")
                 try:
-                    # Attempt to search for this publication
-                    search_query = f"{citation['author']} {citation['year']}"
-                    
-                    # Try to make a naive DOI search via Crossref
+                    # Search Crossref by author within the citation's year. Only accept the result
+                    # if it is the single one whose authors and year match; otherwise it's a guess.
+                    surnames = _cited_surnames(citation["author"])
+                    year_digits = citation["year"][:4]
                     response = requests.get(
                         "https://api.crossref.org/works",
-                        params={"query": search_query, "rows": 1},
+                        params={"query.author": " ".join(surnames), "rows": 20,
+                                "filter": f"from-pub-date:{year_digits},until-pub-date:{year_digits}"},
                         headers={"User-Agent": USER_AGENT},
                         timeout=REQUEST_TIMEOUT,
                     )
-                    data = response.json()
+                    items = response.json().get("message", {}).get("items", [])
+                    matches = [i for i in items if _crossref_item_matches(i, surnames, year_digits)]
+                    item = matches[0] if len(matches) == 1 else None
+                    if len(matches) > 1:
+                        print(f"  {len(matches)} papers match '{citation['source_text']}'; "
+                              "add a DOI or link to pick the right one")
                     
-                    if "message" in data and "items" in data["message"] and data["message"]["items"]:
-                        item = data["message"]["items"][0]
+                    if item:
                         if "DOI" in item:
                             doi = item["DOI"]
                             print(f"  Found potential DOI: {doi}")
@@ -485,7 +504,7 @@ def handle_word_command(args, citation_manager):
                         else:
                             print("  Found search result but no DOI available")
                     else:
-                        print("  No search results found")
+                        print(f"  No unique search result for {citation['source_text']}")
                         
                     # Even if we didn't find metadata, create a placeholder
                     if source_text not in citation_lookup:
@@ -547,7 +566,7 @@ def handle_word_command(args, citation_manager):
     #     )
     # else:
     #     print("No metadata extracted. Cannot update the document.")
-        if args.format.lower() in ["vancouver", "ieee"]:
+        if args.format.lower() in ["vancouver", "ieee", "science"]:
             print("Using numbered citation style...")
             numbered_processor = NumberedCitationProcessor(citation_manager)
             citation_numbers = numbered_processor.process_document(document, citations, extracted_metadata, args.format)

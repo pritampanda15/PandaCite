@@ -9,8 +9,88 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from docx import Document
+from docx.oxml.ns import qn
 from docx.shared import Pt
+
+# A parenthetical containing a year: "(Smith, 2003)", "(Yip et al., 2013; Jayakar et al., 2014)"
+AUTHOR_YEAR_GROUP = re.compile(r"\(([^()]*?\d{4}[a-z]?)\)")
+# One citation within a group: capitalised author text without digits, then the year
+AUTHOR_YEAR_PIECE = re.compile(r"^([A-Z][^\d;]*?),?\s+(\d{4}[a-z]?)$")
+
+
+def _normalize_space(text: str) -> str:
+    return " ".join(text.split())
+
+
+def split_author_year_group(inner: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
+    """Split "A et al., 2013; B, 2014" into (piece, author, year); author/year are None
+    for pieces that are not citations"""
+    pieces = []
+    for piece in inner.split(";"):
+        piece = _normalize_space(piece)
+        match = AUTHOR_YEAR_PIECE.match(piece)
+        pieces.append((piece, match.group(1), match.group(2)) if match else (piece, None, None))
+    return pieces
+
+
+def render_author_year_groups(text: str, citations: Dict[str, Dict[str, Any]], render, join) -> str:
+    """Rewrite each author-year group in text. render(citation) returns the replacement for
+    one citation (or None to keep it); join(parts) builds the replacement for the group."""
+    by_source = {c["source_text"]: c for c in citations.values() if c.get("pattern") == "author_year"}
+    
+    def replace(match):
+        parts, changed = [], False
+        for piece, author, _ in split_author_year_group(match.group(1)):
+            rendered = render(by_source[piece]) if author and piece in by_source else None
+            changed = changed or rendered is not None
+            parts.append(rendered if rendered is not None else piece)
+        return join(parts) if changed else match.group(0)
+    
+    return AUTHOR_YEAR_GROUP.sub(replace, text)
+
+
+def _strip_tracking(url: str) -> str:
+    """Drop utm_* tracking parameters from a URL"""
+    parts = urlsplit(url)
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not k.startswith("utm_")])
+    return urlunsplit(parts._replace(query=query))
+
+
+def extract_hyperlinks(paragraph) -> Dict[str, str]:
+    """Map each hyperlink's visible text to its URL. Handles both <w:hyperlink> elements
+    and HYPERLINK field codes."""
+    links = {}
+    rels = paragraph.part.rels
+    for hyperlink in paragraph._p.iter(qn("w:hyperlink")):
+        rel = rels.get(hyperlink.get(qn("r:id")))
+        if rel is not None and rel.is_external:
+            text = "".join(t.text or "" for t in hyperlink.iter(qn("w:t")))
+            links[_normalize_space(text)] = _strip_tracking(rel.target_ref)
+    
+    # Field codes: fldChar begin, instrText 'HYPERLINK "url"', fldChar separate, result runs, fldChar end
+    instruction, result, in_result = "", [], False
+    for run in paragraph._p.iter(qn("w:r")):
+        field_char = run.find(qn("w:fldChar"))
+        if field_char is not None:
+            kind = field_char.get(qn("w:fldCharType"))
+            if kind == "begin":
+                instruction, result, in_result = "", [], False
+            elif kind == "separate":
+                in_result = True
+            elif kind == "end":
+                url = re.search(r'HYPERLINK\s+"([^"]+)"', instruction)
+                if url and result:
+                    links[_normalize_space("".join(result))] = _strip_tracking(url.group(1))
+                in_result = False
+            continue
+        instr_text = run.find(qn("w:instrText"))
+        if instr_text is not None:
+            instruction += instr_text.text or ""
+        elif in_result:
+            result.extend(t.text or "" for t in run.iter(qn("w:t")))
+    return links
 
 
 class CommandLineWordProcessor:
@@ -26,9 +106,8 @@ class CommandLineWordProcessor:
         self.citation_manager = citation_manager
         self.citation_pattern = r"\(\s*([^)]+)\s*,\s*(\d{4})\s*\)"  # Basic pattern for (Author, Year)
         
-        # Additional patterns for different citation styles
+        # Additional patterns for different citation styles (author-year is handled separately)
         self.citation_patterns = {
-            "author_year": r"\(\s*([^)]+)\s*,\s*(\d{4})\s*\)",  # (Author, Year)
             "superscript": r"(\w+)\s*(\d+)",  # Word1 for superscript citations
             "numbered": r"\[(\d+)\]",  # [1] for numbered citations
             "author_only": r"([A-Z][a-z]+)\s+et\s+al\.",  # Smith et al. for author only citations
@@ -52,20 +131,21 @@ class CommandLineWordProcessor:
         
         # Extract citations from paragraphs
         for paragraph in document.paragraphs:
-            text = paragraph.text
-            self._process_text_for_citations(text, citations, id_detector)
+            self._process_text_for_citations(paragraph.text, citations, id_detector, extract_hyperlinks(paragraph))
         
         # Extract citations from tables
         for table in document.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
-                        self._process_text_for_citations(paragraph.text, citations, id_detector)
+                        self._process_text_for_citations(paragraph.text, citations, id_detector,
+                                                         extract_hyperlinks(paragraph))
         
         print(f"Found {len(citations)} potential citations")
         return document, citations
     
-    def _process_text_for_citations(self, text: str, citations: Dict[str, Dict[str, Any]], id_detector) -> None:
+    def _process_text_for_citations(self, text: str, citations: Dict[str, Dict[str, Any]], id_detector,
+                                    links: Optional[Dict[str, str]] = None) -> None:
         """
         Process text to extract citations
         
@@ -73,22 +153,30 @@ class CommandLineWordProcessor:
             text: Text to process
             citations: Dictionary to store citations
             id_detector: ID detector instance
+            links: Hyperlink text -> URL for this text; a hyperlinked citation is resolved via its URL
         """
-        # Try all citation patterns
+        links = links or {}
+        
+        # Author-year citations, including groups like "(A et al., 2013; B, 2014)"
+        for group in AUTHOR_YEAR_GROUP.finditer(text):
+            for piece, author, year in split_author_year_group(group.group(1)):
+                citation_key = f"{author}-{year}"
+                if author and citation_key not in citations:
+                    citations[citation_key] = {
+                        "author": author,
+                        "year": year,
+                        "pattern": "author_year",
+                        "source_text": piece
+                    }
+                    if piece in links:
+                        citations[citation_key]["id_type"] = "url"
+                        citations[citation_key]["id_value"] = links[piece]
+        
+        # Try the other citation patterns
         for pattern_name, pattern in self.citation_patterns.items():
             matches = re.findall(pattern, text)
             for match in matches:
-                if pattern_name == "author_year":
-                    author, year = match
-                    citation_key = f"{author.strip()}-{year.strip()}"
-                    if citation_key not in citations:
-                        citations[citation_key] = {
-                            "author": author.strip(),
-                            "year": year.strip(),
-                            "pattern": pattern_name,
-                            "source_text": f"({author.strip()}, {year.strip()})"
-                        }
-                elif pattern_name == "numbered":
+                if pattern_name == "numbered":
                     number = match
                     citation_key = f"ref-{number}"
                     if citation_key not in citations:
@@ -336,11 +424,18 @@ class CommandLineWordProcessor:
             True if paragraph was modified, False otherwise
         """
         text = paragraph.text
-        updated_text = text
-        modified = False
         
-        # Replace each citation with the formatted version
+        # Author-year groups: "(A, 2013; B, 2014)" -> "(Formatted A; Formatted B)"
+        def render(citation):
+            formatted = formatted_citations.get(citation.get("metadata_key"), {}).get("in_text")
+            return formatted[1:-1] if formatted and formatted.startswith("(") and formatted.endswith(")") else formatted
+        
+        updated_text = render_author_year_groups(text, citations, render, lambda parts: f"({'; '.join(parts)})")
+        
+        # Replace each remaining (direct identifier) citation with the formatted version
         for citation_key, citation in citations.items():
+            if citation.get("pattern") == "author_year":
+                continue
             if "source_text" in citation and citation["source_text"] in text:
                 # Find the metadata key for this citation
                 if "metadata_key" in citation and citation["metadata_key"] in formatted_citations:
